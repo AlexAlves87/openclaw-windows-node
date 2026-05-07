@@ -337,7 +337,7 @@ internal static class ExecCommandResolver
 
     // Returns true when a raw flag token (possibly quoted, possibly with colon/equals value suffix)
     // represents -EncodedCommand or any of its unambiguous prefix abbreviations.
-    // Covers: "-EncodedCommand", "-enc", "-ec", `"-enc"`, `-enc:payload`, `-encod`, etc.
+    // Covers: "-EncodedCommand", "-enc", "-ec", "-e", `"-enc"`, `-enc:payload`, `-encod`, etc.
     private static bool IsEncodedCommandFlag(string rawToken)
     {
         var t = rawToken;
@@ -347,7 +347,8 @@ internal static class ExecCommandResolver
         // Strip trailing :value or =value (e.g. -EncodedCommand:base64).
         var sep = t.AsSpan(1).IndexOfAny('=', ':');
         var flag = (sep >= 0 ? t[..(sep + 1)] : t).ToLowerInvariant();
-        if (flag is "-ec" or "-enc" or "-encodedcommand") return true;
+        // -e is accepted by Windows PowerShell as a short alias for -EncodedCommand.
+        if (flag is "-e" or "-ec" or "-enc" or "-encodedcommand") return true;
         // Any unambiguous prefix abbreviation of -encodedcommand longer than -enc.
         const string full = "-encodedcommand";
         return flag.Length > 4 && full.StartsWith(flag, StringComparison.Ordinal);

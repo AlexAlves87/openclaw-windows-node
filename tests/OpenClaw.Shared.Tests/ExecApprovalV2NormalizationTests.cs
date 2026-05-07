@@ -784,6 +784,37 @@ public class ExecApprovalV2NormalizationTests
     }
 
     [Fact]
+    public void ResolveForAllowlist_DirectPowerShellEAlias_ReturnsEmpty()
+    {
+        // Windows PowerShell accepts -e as a short alias for -EncodedCommand.
+        // Hanselman review: this was the missing gap in detection.
+        var resolutions = ExecCommandResolver.ResolveForAllowlist(
+            ["powershell", "-e", "dABlAHMAdAA="],
+            evaluationRawCommand: null, cwd: null, env: null);
+        Assert.Empty(resolutions);
+    }
+
+    [Fact]
+    public void ResolveForAllowlist_DirectPwshEAlias_ReturnsEmpty()
+    {
+        // pwsh also accepts -e as short for -EncodedCommand.
+        var resolutions = ExecCommandResolver.ResolveForAllowlist(
+            ["pwsh", "-e", "dABlAHMAdAA="],
+            evaluationRawCommand: null, cwd: null, env: null);
+        Assert.Empty(resolutions);
+    }
+
+    [Fact]
+    public void ResolveForAllowlist_SegmentPowerShellEAlias_ReturnsEmpty()
+    {
+        // Shell-wrapper segment: bash -c "powershell -e base64" — segment scanner must catch -e.
+        var resolutions = ExecCommandResolver.ResolveForAllowlist(
+            ["bash", "-c", "powershell -e dABlAHMAdAA="],
+            evaluationRawCommand: null, cwd: null, env: null);
+        Assert.Empty(resolutions);
+    }
+
+    [Fact]
     public void ResolveForAllowlist_QuotedPathWithSpacesAndSuffix_SuffixPreserved()
     {
         // Hanselman's specific example: "C:\Program Files\Git\bin\git".exe
