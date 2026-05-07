@@ -349,9 +349,9 @@ internal static class ExecCommandResolver
         var flag = (sep >= 0 ? t[..(sep + 1)] : t).ToLowerInvariant();
         // -e is accepted by Windows PowerShell as a short alias for -EncodedCommand.
         if (flag is "-e" or "-ec" or "-enc" or "-encodedcommand") return true;
-        // Any unambiguous prefix abbreviation of -encodedcommand longer than -enc.
+        // Any unambiguous prefix abbreviation of -encodedcommand beginning at -en.
         const string full = "-encodedcommand";
-        return flag.Length > 4 && full.StartsWith(flag, StringComparison.Ordinal);
+        return flag.Length >= 3 && full.StartsWith(flag, StringComparison.Ordinal);
     }
 
     // True when direct exec (no shell wrapper) is a PowerShell invocation with -EncodedCommand.

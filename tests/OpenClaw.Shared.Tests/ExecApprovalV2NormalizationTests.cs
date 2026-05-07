@@ -708,6 +708,24 @@ public class ExecApprovalV2NormalizationTests
         Assert.Empty(resolutions);
     }
 
+    [Theory]
+    [InlineData("powershell", "-en")]
+    [InlineData("pwsh", "-en")]
+    [InlineData("powershell", "-en:dABlAHMAdAA=")]
+    [InlineData("powershell", "-en=dABlAHMAdAA=")]
+    public void ResolveForAllowlist_DirectPowerShellEnAbbreviation_ReturnsEmpty(string shell, string flag)
+    {
+        // -en is also an unambiguous prefix abbreviation of -EncodedCommand.
+        var command = flag.Contains('=') || flag.Contains(':')
+            ? new[] { shell, flag }
+            : new[] { shell, flag, "dABlAHMAdAA=" };
+
+        var resolutions = ExecCommandResolver.ResolveForAllowlist(
+            command,
+            evaluationRawCommand: null, cwd: null, env: null);
+        Assert.Empty(resolutions);
+    }
+
     [Fact]
     public void ResolveForAllowlist_DirectPowerShellExeEnc_ReturnsEmpty()
     {
@@ -730,11 +748,32 @@ public class ExecApprovalV2NormalizationTests
     }
 
     [Fact]
+    public void ResolveForAllowlist_EnvTransparentPwshEnAbbreviation_ReturnsEmpty()
+    {
+        // Transparent env prefix must still fail-closed when inner pwsh uses -en.
+        var resolutions = ExecCommandResolver.ResolveForAllowlist(
+            ["env", "pwsh", "-en", "dABlAHMAdAA="],
+            evaluationRawCommand: null, cwd: null, env: null);
+        Assert.Empty(resolutions);
+    }
+
+    [Fact]
     public void ResolveForAllowlist_SegmentPowerShellQuotedEncFlag_ReturnsEmpty()
     {
         // bash -c 'powershell "-enc" base64' — quoted -enc in shell segment → fail-closed.
         var resolutions = ExecCommandResolver.ResolveForAllowlist(
             ["bash", "-c", "powershell \"-enc\" dABlAHMAdAA="],
+            evaluationRawCommand: null, cwd: null, env: null);
+        Assert.Empty(resolutions);
+    }
+
+    [Theory]
+    [InlineData("powershell -en dABlAHMAdAA=")]
+    [InlineData("powershell \"-en\" dABlAHMAdAA=")]
+    public void ResolveForAllowlist_SegmentPowerShellEnAbbreviation_ReturnsEmpty(string payload)
+    {
+        var resolutions = ExecCommandResolver.ResolveForAllowlist(
+            ["bash", "-c", payload],
             evaluationRawCommand: null, cwd: null, env: null);
         Assert.Empty(resolutions);
     }
