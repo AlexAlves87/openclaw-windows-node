@@ -27,6 +27,15 @@ public sealed class ExecApprovalsStore
     private readonly IOpenClawLogger _logger;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    private enum LoadFileStatus
+    {
+        Missing,
+        Loaded,
+        Invalid,
+    }
+
+    private readonly record struct LoadFileResult(LoadFileStatus Status, ExecApprovalsFile? File);
+
     public ExecApprovalsStore(string dataPath, IOpenClawLogger logger)
     {
         _filePath = Path.Combine(dataPath, "exec-approvals.json");
@@ -38,10 +47,10 @@ public sealed class ExecApprovalsStore
     // No side effects; does not create the file. Used by the evaluator (PR5).
     public ExecApprovalsResolved ResolveReadOnly(string? agentId)
     {
-        var file = LoadFile();
-        return file is null
+        var result = LoadFile();
+        return result.Status != LoadFileStatus.Loaded || result.File is null
             ? DefaultResolved(NormalizeAgentId(agentId))
-            : ResolveFromFile(file, agentId);
+            : ResolveFromFile(result.File, agentId);
     }
 
     // Side-effecting resolve: creates the file if missing, initializes agents dict.
@@ -62,9 +71,9 @@ public sealed class ExecApprovalsStore
 
     // ── File I/O ──────────────────────────────────────────────────────────────
 
-    private ExecApprovalsFile? LoadFile()
+    private LoadFileResult LoadFile()
     {
-        if (!File.Exists(_filePath)) return null;
+        if (!File.Exists(_filePath)) return new LoadFileResult(LoadFileStatus.Missing, null);
         try
         {
             var json = File.ReadAllText(_filePath);
@@ -72,32 +81,34 @@ public sealed class ExecApprovalsStore
             if (file is null)
             {
                 _logger.Warn("[EXEC-APPROVALS] exec-approvals.json deserialized to null; applying default-deny");
-                return null;
+                return new LoadFileResult(LoadFileStatus.Invalid, null);
             }
             if (file.Version != 1)
             {
-                _logger.Warn($"[EXEC-APPROVALS] exec-approvals.json has unsupported version {file.Version}; applying default-deny");
-                return null;
+                var version = file.Version?.ToString() ?? "missing";
+                _logger.Warn($"[EXEC-APPROVALS] exec-approvals.json has unsupported version {version}; applying default-deny");
+                return new LoadFileResult(LoadFileStatus.Invalid, null);
             }
-            return Normalize(file);
+            return new LoadFileResult(LoadFileStatus.Loaded, Normalize(file));
         }
         catch (JsonException ex)
         {
             _logger.Warn($"[EXEC-APPROVALS] exec-approvals.json is malformed ({ex.Message}); applying default-deny");
-            return null;
+            return new LoadFileResult(LoadFileStatus.Invalid, null);
         }
         catch (Exception ex)
         {
             _logger.Warn($"[EXEC-APPROVALS] Failed to load exec-approvals.json ({ex.Message}); applying default-deny");
-            return null;
+            return new LoadFileResult(LoadFileStatus.Invalid, null);
         }
     }
 
     private async Task<ExecApprovalsFile> EnsureFileAsync()
     {
-        var file = LoadFile();
-        if (file is not null)
+        var result = LoadFile();
+        if (result.Status == LoadFileStatus.Loaded && result.File is not null)
         {
+            var file = result.File;
             if (file.Agents is null)
             {
                 file = new ExecApprovalsFile
@@ -112,14 +123,16 @@ public sealed class ExecApprovalsStore
             return file;
         }
 
+        if (result.Status == LoadFileStatus.Invalid)
+        {
+            _logger.Warn($"[EXEC-APPROVALS] Preserving unreadable exec-approvals.json at {_filePath}; using empty in-memory store");
+            return new ExecApprovalsFile { Version = 1, Agents = [] };
+        }
+
         // socket intentionally omitted in Windows v1 (research doc 02 decision 3).
-        var replacing = File.Exists(_filePath);
         var newFile = new ExecApprovalsFile { Version = 1, Agents = [] };
         await SaveFileAsync(newFile).ConfigureAwait(false);
-        if (replacing)
-            _logger.Warn($"[EXEC-APPROVALS] Replaced unreadable exec-approvals.json with empty store at {_filePath}");
-        else
-            _logger.Info($"[EXEC-APPROVALS] Created {_filePath}");
+        _logger.Info($"[EXEC-APPROVALS] Created {_filePath}");
         return newFile;
     }
 

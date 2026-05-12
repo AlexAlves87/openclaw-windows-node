@@ -67,7 +67,7 @@ public sealed class ExecApprovalsAgent
 
 public sealed class ExecApprovalsFile
 {
-    public int Version { get; set; } = 1;
+    public int? Version { get; set; }
     public ExecApprovalsSocketConfig? Socket { get; set; }
     public ExecApprovalsDefaults? Defaults { get; set; }
     public Dictionary<string, ExecApprovalsAgent>? Agents { get; set; }

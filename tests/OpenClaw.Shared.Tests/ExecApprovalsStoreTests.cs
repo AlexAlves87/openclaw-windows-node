@@ -98,6 +98,21 @@ public class ExecApprovalsStoreTests : IDisposable
         Assert.Contains(_log.Warnings, w => w.Contains("unsupported version"));
     }
 
+    [Fact]
+    public void ResolveReadOnly_MissingVersion_ReturnsDefaultDenyAndWarns()
+    {
+        WriteFile("""
+        {
+          "defaults": { "security": "full" },
+          "agents": {}
+        }
+        """);
+        var resolved = Store().ResolveReadOnly("main");
+
+        Assert.Equal(ExecSecurity.Deny, resolved.Defaults.Security);
+        Assert.Contains(_log.Warnings, w => w.Contains("unsupported version missing"));
+    }
+
     // ── Deserialization: enum values ──────────────────────────────────────────
 
     [Fact]
@@ -411,17 +426,35 @@ public class ExecApprovalsStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task ResolveAsync_MalformedFile_ReplacesWithEmptyAndWarns()
+    public async Task ResolveAsync_MalformedFile_PreservesFileAndReturnsDefaultDeny()
     {
         WriteFile("{ bad json }");
-        await Store().ResolveAsync(null);
+        var resolved = await Store().ResolveAsync(null);
 
-        // File replaced with valid empty store.
-        var json = File.ReadAllText(FilePath);
-        Assert.Contains("\"version\"", json);
-        // Logged as a replacement warning, not a "Created" info.
-        Assert.Contains(_log.Warnings, w => w.Contains("Replaced"));
+        Assert.Equal(ExecSecurity.Deny, resolved.Defaults.Security);
+        Assert.Equal("{ bad json }", File.ReadAllText(FilePath));
+        Assert.Contains(_log.Warnings, w => w.Contains("Preserving unreadable"));
         Assert.DoesNotContain(_log.Infos, i => i.Contains("Created"));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_UnsupportedVersion_PreservesFileAndReturnsDefaultDeny()
+    {
+        WriteFile("""
+        {
+          "version": 2,
+          "defaults": { "security": "full" },
+          "agents": {}
+        }
+        """);
+        var original = File.ReadAllText(FilePath);
+
+        var resolved = await Store().ResolveAsync(null);
+
+        Assert.Equal(ExecSecurity.Deny, resolved.Defaults.Security);
+        Assert.Equal(original, File.ReadAllText(FilePath));
+        Assert.Contains(_log.Warnings, w => w.Contains("unsupported version"));
+        Assert.Contains(_log.Warnings, w => w.Contains("Preserving unreadable"));
     }
 
     [Fact]
