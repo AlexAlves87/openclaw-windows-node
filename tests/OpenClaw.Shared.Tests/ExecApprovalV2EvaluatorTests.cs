@@ -735,6 +735,22 @@ public class ExecApprovalV2EvaluatorTests
     }
 
     [Fact]
+    public void Matcher_DoubleStar_AtStart_DoesNotMatchPartialBasename()
+    {
+        // **/cmd.exe must not match a path whose basename merely ends with cmd.exe.
+        var entries = new[] { Entry(@"**/cmd.exe") };
+        Assert.Null(ExecAllowlistMatcher.Match(entries, Res("notcmd", @"C:\Windows\notcmd.exe")));
+    }
+
+    [Fact]
+    public void Matcher_DoubleStar_AtStart_MatchesRootLevel()
+    {
+        // **/rg.exe must also match rg.exe at root level (no leading directory).
+        var entries = new[] { Entry(@"**/rg.exe") };
+        Assert.NotNull(ExecAllowlistMatcher.Match(entries, Res("rg", @"rg.exe")));
+    }
+
+    [Fact]
     public void Matcher_PathWithSpaces_Matches()
     {
         // Paths like C:\Program Files\git.exe are common on Windows.

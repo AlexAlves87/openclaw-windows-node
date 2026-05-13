@@ -85,12 +85,19 @@ internal static class ExecAllowlistMatcher
         {
             if (i + 1 < pattern.Length && pattern[i] == '*' && pattern[i + 1] == '*')
             {
-                sb.Append(".*");
                 i += 2;
-                // Consume the separator after ** only when more content follows, so **/foo matches
-                // foo at any depth including root. Skipping when trailing prevents **/ alone from
-                // generating ^.*$ (match-everything).
-                if (i < pattern.Length && pattern[i] == '/' && i + 1 < pattern.Length) i++;
+                if (i < pattern.Length && pattern[i] == '/' && i + 1 < pattern.Length)
+                {
+                    // **/rest — rest must start at a segment boundary, not as a suffix of another name.
+                    // (.*\/)? matches zero or more path segments including their trailing separator.
+                    sb.Append(@"(.*\/)?");
+                    i++;
+                }
+                else
+                {
+                    // trailing ** — match anything (no following segment to anchor)
+                    sb.Append(".*");
+                }
             }
             else if (pattern[i] == '*')
             {
