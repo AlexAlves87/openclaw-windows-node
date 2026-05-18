@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using OpenClaw.Shared;
@@ -18,12 +19,13 @@ public class ExecApprovalV2PromptAdapterTests
             DisplayCommand = "echo hello",
             Security = ExecSecurity.Full,
             Ask = ExecAsk.Always,
-            AgentId = "agent-1"
+            AgentId = "agent-1",
+            CorrelationId = "test-corr-1"
         };
 
-        var result = await ExecApprovalV2NullPromptHandler.Instance.PromptAsync(request);
+        var result = await ExecApprovalV2NullPromptHandler.Instance.PromptAsync(request, CancellationToken.None);
 
-        Assert.Equal(ExecApprovalDecision.Deny, result);
+        Assert.Equal(ExecApprovalPromptOutcome.Deny, result);
     }
 
     [Fact]
@@ -35,20 +37,21 @@ public class ExecApprovalV2PromptAdapterTests
             Security = ExecSecurity.Allowlist,
             Ask = ExecAsk.OnMiss,
             AgentId = "agent-2",
+            CorrelationId = "test-corr-2",
             Cwd = null,
             Host = null,
             ResolvedPath = null,
             SessionKey = null
         };
 
-        ExecApprovalDecision result = default;
+        ExecApprovalPromptOutcome result = default;
         var ex = await Record.ExceptionAsync(async () =>
         {
-            result = await ExecApprovalV2NullPromptHandler.Instance.PromptAsync(request);
+            result = await ExecApprovalV2NullPromptHandler.Instance.PromptAsync(request, CancellationToken.None);
         });
 
         Assert.Null(ex);
-        Assert.Equal(ExecApprovalDecision.Deny, result);
+        Assert.Equal(ExecApprovalPromptOutcome.Deny, result);
     }
 
     [Fact]
@@ -60,8 +63,23 @@ public class ExecApprovalV2PromptAdapterTests
     {
         // Task.FromResult guarantee: the returned Task must be synchronously completed.
         // An async implementation of the stub would break fail-closed semantics under TryEnqueue.
-        var task = ExecApprovalV2NullPromptHandler.Instance.PromptAsync(MinimalRequest());
+        var task = ExecApprovalV2NullPromptHandler.Instance.PromptAsync(MinimalRequest(), CancellationToken.None);
         Assert.True(task.IsCompleted);
+    }
+
+    [Fact]
+    public async Task NullPromptHandler_DoesNotThrow_WhenCancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var result = await ExecApprovalV2NullPromptHandler.Instance.PromptAsync(MinimalRequest(), cts.Token);
+        Assert.Equal(ExecApprovalPromptOutcome.Deny, result);
+    }
+
+    [Fact]
+    public void PromptOutcome_Default_IsDeny()
+    {
+        Assert.Equal(ExecApprovalPromptOutcome.Deny, default(ExecApprovalPromptOutcome));
     }
 
     [Fact]
@@ -73,10 +91,27 @@ public class ExecApprovalV2PromptAdapterTests
             DisplayCommand = raw,
             Security = ExecSecurity.Full,
             Ask = ExecAsk.Always,
-            AgentId = "a"
+            AgentId = "a",
+            CorrelationId = "test-corr-3"
         };
 
         Assert.Equal(raw, req.DisplayCommand);
+    }
+
+    [Fact]
+    public void PromptRequest_CorrelationId_IsStoredAsProvided()
+    {
+        const string id = "corr-abc-123";
+        var req = new ExecApprovalV2PromptRequest
+        {
+            DisplayCommand = "echo hello",
+            Security = ExecSecurity.Full,
+            Ask = ExecAsk.Always,
+            AgentId = "a",
+            CorrelationId = id
+        };
+
+        Assert.Equal(id, req.CorrelationId);
     }
 
     [Fact]
@@ -90,14 +125,15 @@ public class ExecApprovalV2PromptAdapterTests
     }
 
     [Theory]
-    [InlineData(ExecApprovalDecision.AllowOnce)]
-    [InlineData(ExecApprovalDecision.AllowAlways)]
-    [InlineData(ExecApprovalDecision.Deny)]
-    public async Task FixedDecisionHandler_ReturnsExpectedDecision(ExecApprovalDecision decision)
+    [InlineData(ExecApprovalPromptOutcome.Allow)]
+    [InlineData(ExecApprovalPromptOutcome.AllowOnce)]
+    [InlineData(ExecApprovalPromptOutcome.AllowAlways)]
+    [InlineData(ExecApprovalPromptOutcome.Deny)]
+    public async Task FixedOutcomeHandler_ReturnsExpectedOutcome(ExecApprovalPromptOutcome outcome)
     {
-        var handler = new FixedDecisionPromptHandler(decision);
-        var result = await handler.PromptAsync(MinimalRequest());
-        Assert.Equal(decision, result);
+        var handler = new FixedOutcomePromptHandler(outcome);
+        var result = await handler.PromptAsync(MinimalRequest(), CancellationToken.None);
+        Assert.Equal(outcome, result);
     }
 
     [Fact]
@@ -115,6 +151,7 @@ public class ExecApprovalV2PromptAdapterTests
         Assert.Equal("OpenClaw.Shared", asm);
     }
 
+    // Delete once real production wiring of IExecApprovalV2PromptHandler lands in src/.
     [Fact]
     public void ProductionWiring_NullPromptHandler_NotReferencedInSrc()
     {
@@ -124,6 +161,8 @@ public class ExecApprovalV2PromptAdapterTests
         var srcDir = Path.Combine(repoRoot!, "src");
         var violations = Directory
             .GetFiles(srcDir, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                     && !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
             .Where(f => !f.EndsWith("ExecApprovalV2NullPromptHandler.cs",
                                      StringComparison.OrdinalIgnoreCase))
             .Where(f => File.ReadAllText(f)
@@ -139,16 +178,17 @@ public class ExecApprovalV2PromptAdapterTests
             DisplayCommand = "echo hello",
             Security = ExecSecurity.Full,
             Ask = ExecAsk.Always,
-            AgentId = "agent-1"
+            AgentId = "agent-1",
+            CorrelationId = "test-corr-1"
         };
 
-    private sealed class FixedDecisionPromptHandler : IExecApprovalV2PromptHandler
+    private sealed class FixedOutcomePromptHandler : IExecApprovalV2PromptHandler
     {
-        private readonly ExecApprovalDecision _decision;
-        public FixedDecisionPromptHandler(ExecApprovalDecision decision) => _decision = decision;
+        private readonly ExecApprovalPromptOutcome _outcome;
+        public FixedOutcomePromptHandler(ExecApprovalPromptOutcome outcome) => _outcome = outcome;
 
-        public Task<ExecApprovalDecision> PromptAsync(ExecApprovalV2PromptRequest request)
-            => Task.FromResult(_decision);
+        public Task<ExecApprovalPromptOutcome> PromptAsync(ExecApprovalV2PromptRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(_outcome);
     }
 
     private static string? FindRepoRoot()

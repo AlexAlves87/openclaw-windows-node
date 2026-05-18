@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace OpenClaw.Shared.ExecApprovals;
@@ -5,5 +6,5 @@ namespace OpenClaw.Shared.ExecApprovals;
 public interface IExecApprovalV2PromptHandler
 {
     // Implementations must never throw. On any unhandled error, fail-closed to Deny.
-    Task<ExecApprovalDecision> PromptAsync(ExecApprovalV2PromptRequest request);
+    Task<ExecApprovalPromptOutcome> PromptAsync(ExecApprovalV2PromptRequest request, CancellationToken cancellationToken = default);
 }

@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace OpenClaw.Shared.ExecApprovals;
@@ -7,6 +8,6 @@ public sealed class ExecApprovalV2NullPromptHandler : IExecApprovalV2PromptHandl
 {
     public static readonly ExecApprovalV2NullPromptHandler Instance = new();
 
-    public Task<ExecApprovalDecision> PromptAsync(ExecApprovalV2PromptRequest request)
-        => Task.FromResult(ExecApprovalDecision.Deny);
+    public Task<ExecApprovalPromptOutcome> PromptAsync(ExecApprovalV2PromptRequest request, CancellationToken cancellationToken = default)
+        => Task.FromResult(ExecApprovalPromptOutcome.Deny);
 }
