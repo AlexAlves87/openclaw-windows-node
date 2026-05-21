@@ -2129,30 +2129,6 @@ public partial class App : Application, OpenClawTray.Services.IAppCommands
             catch { /* ignore */ }
         }
     }
-    
-    private void OnRecordingStateChanged(object? sender, RecordingStateEventArgs args)
-    {
-        var source = args.Type == RecordingType.Screen ? "Screen" : "Camera";
-        if (args.IsActive)
-        {
-            var title = args.Type == RecordingType.Screen
-                ? LocalizationHelper.GetString("Activity_ScreenRecordingStarted")
-                : LocalizationHelper.GetString("Activity_CameraRecordingStarted");
-            var duration = args.DurationMs > 0 ? $" ({args.DurationMs / 1000.0:0.#}s)" : "";
-            AddRecentActivity($"{title}{duration}", category: "node",
-                icon: "🔴",
-                details: string.Format(LocalizationHelper.GetString("Activity_RecordingRequestedByAgent"), source));
-        }
-        else
-        {
-            var title = args.Type == RecordingType.Screen
-                ? LocalizationHelper.GetString("Activity_ScreenRecordingComplete")
-                : LocalizationHelper.GetString("Activity_CameraRecordingComplete");
-            AddRecentActivity(title, category: "node",
-                icon: "✅",
-                details: string.Format(LocalizationHelper.GetString("Activity_RecordingSentToAgent"), source));
-        }
-    }
 
     private void OnPairingStatusChanged(object? sender, OpenClaw.Shared.PairingStatusEventArgs args)
     {
