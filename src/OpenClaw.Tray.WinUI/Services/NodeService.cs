@@ -730,6 +730,7 @@ public sealed class NodeService : IDisposable
             Mode = "node",
             Status = IsConnected ? "connected" : "disconnected",
             Platform = "windows",
+            DeviceFamily = "Windows",
             LastSeen = DateTime.UtcNow,
             IsOnline = IsConnected,
             Capabilities = capabilities,
