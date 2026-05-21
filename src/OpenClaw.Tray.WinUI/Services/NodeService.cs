@@ -611,7 +611,7 @@ public sealed class NodeService : IDisposable
                 },
                 _logger,
                 serverName: "openclaw-tray-mcp",
-                serverVersion: typeof(NodeService).Assembly.GetName().Version?.ToString() ?? "0.0.0");
+                serverVersion: AppVersionInfo.Version);
             // Bearer-token auth. Token is created on first start and persists
             // alongside other OpenClawTray data (so OPENCLAW_TRAY_DATA_DIR
             // isolation in tests scopes the token too); CLI/agent registration
