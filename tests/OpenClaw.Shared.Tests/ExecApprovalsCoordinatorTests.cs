@@ -432,6 +432,22 @@ public class ExecApprovalsCoordinatorTests : IDisposable
         Assert.False(result.IsAllow);
     }
 
+    // ── 24. Outer safety net — CanPresent throws → InternalError, not exception ───
+
+    [Fact]
+    public async Task CanPresent_Throws_ReturnsInternalError_NotException()
+    {
+        WriteStoreFile("""{"version":1,"defaults":{"security":"full","ask":"always"}}""");
+        var log = new CapturingLogger();
+        var result = await MakeCoordinator(
+            canPresent: new ThrowingCanPresentEvaluator(),
+            logger: log).HandleAsync(DefaultReq(), "outer-1");
+
+        Assert.Equal(ExecApprovalV2Code.InternalError, result.Code);
+        Assert.Equal("unexpected-exception", result.Reason);
+        Assert.Contains(log.Errors, e => e.Contains("unexpected-exception"));
+    }
+
     // ── Test doubles ──────────────────────────────────────────────────────────
 
     private sealed class FixedDecisionPromptHandler : IExecApprovalV2PromptHandler
@@ -442,6 +458,12 @@ public class ExecApprovalsCoordinatorTests : IDisposable
             ExecApprovalV2PromptRequest _,
             CancellationToken cancellationToken = default)
             => Task.FromResult(_outcome);
+    }
+
+    private sealed class ThrowingCanPresentEvaluator : ICanPresentEvaluator
+    {
+        public bool CanPresent(string? requestSessionKey)
+            => throw new InvalidOperationException("simulated canPresent crash");
     }
 
     private sealed class ThrowingPromptHandler : IExecApprovalV2PromptHandler

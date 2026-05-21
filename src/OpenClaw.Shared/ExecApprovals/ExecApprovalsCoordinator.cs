@@ -40,6 +40,8 @@ public sealed class ExecApprovalsCoordinator : IExecApprovalV2Handler
         if (string.IsNullOrEmpty(correlationId))
             correlationId = Guid.NewGuid().ToString("N");
 
+        try
+        {
         // Step 1: validate
         var validation = ExecApprovalV2InputValidator.Validate(request);
         if (!validation.IsValid)
@@ -187,6 +189,18 @@ public sealed class ExecApprovalsCoordinator : IExecApprovalV2Handler
 
         // Step 10: return Allow
         return ExecApprovalV2Result.Allow();
+        }
+        catch (Exception ex)
+        {
+            // Outer safety net: any unhandled exception in buildContext, CanPresent, FallbackDecision,
+            // or an out-of-range prompt outcome produces a typed deny instead of escaping HandleAsync.
+            // Rail 1: failures in the new path must never be silent or untyped.
+            var msg = $"[EXEC-APPROVALS] [{correlationId}] path=new " +
+                $"canonical=\"\" decision=deny reason=unexpected-exception " +
+                $"fallbackUsed=false promptAttempted=false";
+            _logger.Error(msg, ex);
+            return ExecApprovalV2Result.InternalError("unexpected-exception");
+        }
     }
 
     // Fail-safe defaults when no UI is available (Saltzer/Schroeder fail-safe defaults, OWASP ASVS 4.1.4).
