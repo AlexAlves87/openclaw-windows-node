@@ -42,11 +42,11 @@
                       SelectionChanged="OnAgentFilterComboChanged">
                 <ComboBoxItem x:Uid="AgentEventsPage_ComboBoxItem_26" Content="All Agents" Tag="" IsSelected="True"/>
             </ComboBox>
-            <Button x:Uid="ClearButton" x:Name="ClearButton" Grid.Column="2" Click="OnClear">
+            <Button x:Name="ClearButton" Grid.Column="2" Click="OnClear">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon Glyph="{x:Bind helpers:FluentIconCatalog.Clear, Mode=OneTime}"
                               FontSize="14" IsTextScaleFactorEnabled="False"/>
-                    <TextBlock Text="Clear"/>
+                    <TextBlock x:Uid="ClearButton" Text="Clear"/>
                 </StackPanel>
             </Button>
         </Grid>

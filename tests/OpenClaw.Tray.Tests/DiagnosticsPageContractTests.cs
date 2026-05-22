@@ -309,6 +309,21 @@ public sealed class DiagnosticsPageContractTests
     }
 
     [Fact]
+    public void DebugPage_MainAndDetailViewsUseCanonicalCenteredWidthPattern()
+    {
+        var xaml = Read("src", "OpenClaw.Tray.WinUI", "Pages", "DebugPage.xaml");
+
+        Assert.Matches(
+            new System.Text.RegularExpressions.Regex(
+                @"x:Name=""MainView""[\s\S]{0,500}<Grid HorizontalAlignment=""Stretch"">[\s\S]{0,300}<StackPanel HorizontalAlignment=""Stretch""[\s\S]{0,160}MaxWidth=""900""[\s\S]{0,160}Padding=""24,24,24,24"""),
+            xaml);
+        Assert.Matches(
+            new System.Text.RegularExpressions.Regex(
+                @"x:Name=""DetailView""[\s\S]{0,400}HorizontalAlignment=""Stretch""[\s\S]{0,300}<Grid MaxWidth=""900""[\s\S]{0,160}HorizontalAlignment=""Stretch""[\s\S]{0,160}Padding=""24,24,24,24"""),
+            xaml);
+    }
+
+    [Fact]
     public void DebugPage_UsesFluentIconCatalog_NotLiteralGlyphs()
     {
         // Per docs/design/iconography.md and AGENT_HANDOFF.md "drift

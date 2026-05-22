@@ -1546,6 +1546,9 @@ Voer op uw gateway-host (Mac/Linux) uit:
   <data name="ClearButton.Content" xml:space="preserve">
     <value>Wissen</value>
   </data>
+  <data name="ClearButton.Text" xml:space="preserve">
+    <value>Wissen</value>
+  </data>
   <data name="BindingsPage_TextBlock_16.Text" xml:space="preserve">
     <value>Koppelingen</value>
   </data>
