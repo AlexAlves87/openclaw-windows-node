@@ -26,19 +26,6 @@ public sealed partial class SkillsPage : Page
         {
             if (_appState != null) _appState.PropertyChanged -= OnAppStateChanged;
         };
-        EnabledHeaderBtn.Click += (s, e) =>
-        {
-            _enabledExpanded = !_enabledExpanded;
-            EnabledChevron.Glyph = _enabledExpanded ? "\uE70E" : "\uE70D";
-            EnabledPanel.Visibility = _enabledExpanded ? Visibility.Visible : Visibility.Collapsed;
-            if (!_enabledExpanded) SkillsScroller.ChangeView(null, 0, null, disableAnimation: false);
-        };
-        DisabledHeaderBtn.Click += (s, e) =>
-        {
-            _disabledExpanded = !_disabledExpanded;
-            DisabledChevron.Glyph = _disabledExpanded ? "\uE70E" : "\uE70D";
-            DisabledPanel.Visibility = _disabledExpanded ? Visibility.Visible : Visibility.Collapsed;
-        };
     }
 
     public void Initialize()
@@ -198,9 +185,6 @@ public sealed partial class SkillsPage : Page
         RebuildCards();
     }
 
-    private bool _enabledExpanded = true;
-    private bool _disabledExpanded = true;
-
     private void RebuildCards()
     {
         LoadingState.Visibility = Visibility.Collapsed;
@@ -217,9 +201,7 @@ public sealed partial class SkillsPage : Page
 
         EnabledHeaderText.Text = $"Enabled ({enabled.Count})";
         DisabledHeaderText.Text = $"Disabled ({disabled.Count})";
-        DisabledHeaderBtn.Visibility = disabled.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        DisabledPanel.Visibility = _disabledExpanded ? Visibility.Visible : Visibility.Collapsed;
-        EnabledPanel.Visibility = _enabledExpanded ? Visibility.Visible : Visibility.Collapsed;
+        DisabledExpander.Visibility = disabled.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         var total = _allSkills.Count;
         CountText.Text = total > 0 ? $"({enabled.Count}/{total} enabled)" : "";
