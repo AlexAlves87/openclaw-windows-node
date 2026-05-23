@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
+using Xunit.Abstractions;
 using OpenClaw.Shared;
 using OpenClaw.Shared.ExecApprovals;
 
@@ -19,11 +20,13 @@ namespace OpenClaw.Shared.Tests;
 public class ExecApprovalsCoordinatorTests : IDisposable
 {
     private readonly string _dir;
+    private readonly ITestOutputHelper _output;
 
-    public ExecApprovalsCoordinatorTests()
+    public ExecApprovalsCoordinatorTests(ITestOutputHelper output)
     {
         _dir = Path.Combine(Path.GetTempPath(), $"oca-coord-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
+        _output = output;
     }
 
     public void Dispose() => Directory.Delete(_dir, recursive: true);
@@ -588,6 +591,48 @@ public class ExecApprovalsCoordinatorTests : IDisposable
         var resolved = new ExecApprovalsStore(_dir, NullLogger.Instance).ResolveReadOnly("main");
         Assert.Single(resolved.Allowlist);
         Assert.NotNull(resolved.Allowlist[0].LastUsedCommand);
+    }
+
+    // End-to-end coordinator/store runtime proof using real filesystem I/O.
+    // Demonstrates the two side-effect paths via ITestOutputHelper, so the
+    // resulting JSON appears in `dotnet test ... --logger "console;verbosity=detailed"`:
+    //   - AllowAlways persists a new allowlist entry into exec-approvals.json
+    //   - A later allowlist hit records lastUsed* metadata
+    [Fact]
+    public async Task RuntimeProof_AllowAlways_PersistsAndRecordsLastUsed()
+    {
+        var filePath = Path.Combine(_dir, "exec-approvals.json");
+
+        WriteStoreFile("""{"version":1,"agents":{"main":{"security":"allowlist","ask":"always"}}}""");
+        _output.WriteLine("=== Initial exec-approvals.json ===");
+        _output.WriteLine(File.ReadAllText(filePath));
+
+        var coordinator = MakeCoordinator(
+            canPresent: AlwaysCanPresentEvaluator.Instance,
+            prompt: new FixedDecisionPromptHandler(ExecApprovalPromptOutcome.AllowAlways));
+
+        // Step 1: AllowAlways → entry persisted (no lastUsed* yet).
+        var first = await coordinator.HandleAsync(Req("""{"command":["cmd"]}"""), "proof-1");
+        Assert.True(first.IsAllow);
+
+        _output.WriteLine("");
+        _output.WriteLine("=== After AllowAlways (correlationId=proof-1) ===");
+        _output.WriteLine(File.ReadAllText(filePath));
+
+        // Step 2: Same command again → allowlist hit, lastUsed* recorded.
+        var second = await coordinator.HandleAsync(Req("""{"command":["cmd"]}"""), "proof-2");
+        Assert.True(second.IsAllow);
+
+        _output.WriteLine("");
+        _output.WriteLine("=== After allowlist hit (correlationId=proof-2) ===");
+        _output.WriteLine(File.ReadAllText(filePath));
+
+        var resolvedAfter = new ExecApprovalsStore(_dir, NullLogger.Instance).ResolveReadOnly("main");
+        Assert.Single(resolvedAfter.Allowlist);
+        Assert.NotNull(resolvedAfter.Allowlist[0].Pattern);
+        Assert.NotNull(resolvedAfter.Allowlist[0].LastUsedAt);
+        Assert.NotNull(resolvedAfter.Allowlist[0].LastUsedCommand);
+        Assert.NotNull(resolvedAfter.Allowlist[0].LastResolvedPath);
     }
 
     // ── Test doubles ──────────────────────────────────────────────────────────
