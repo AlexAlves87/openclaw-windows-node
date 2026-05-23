@@ -2958,6 +2958,12 @@ On your gateway host (Mac/Linux), run:
   <data name="Chat_Notification_ConnectionInterrupted" xml:space="preserve">
     <value>Connection lost — response interrupted.</value>
   </data>
+  <data name="Chat_Notification_KeylessEventDropped" xml:space="preserve">
+    <value>Gateway timeline event dropped</value>
+  </data>
+  <data name="Chat_Notification_KeylessEventDroppedMessage" xml:space="preserve">
+    <value>The gateway sent a chat timeline event without a session key, so OpenClaw ignored it to avoid mixing timelines. Update or restart the gateway if this continues.</value>
+  </data>
   <data name="VoiceSettingsPage_TestVoiceButtonText.Text" xml:space="preserve">
     <value>Test Voice Input</value>
   </data>

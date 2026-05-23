@@ -2911,6 +2911,12 @@ Voer op uw gateway-host (Mac/Linux) uit:
   <data name="Chat_Notification_ConnectionInterrupted" xml:space="preserve">
     <value>Verbinding verbroken — antwoord onderbroken.</value>
   </data>
+  <data name="Chat_Notification_KeylessEventDropped" xml:space="preserve">
+    <value>Gateway-tijdlijngebeurtenis genegeerd</value>
+  </data>
+  <data name="Chat_Notification_KeylessEventDroppedMessage" xml:space="preserve">
+    <value>De gateway heeft een chattijdlijngebeurtenis zonder sessiesleutel verzonden, dus OpenClaw heeft deze genegeerd om te voorkomen dat tijdlijnen door elkaar lopen. Werk de gateway bij of start deze opnieuw als dit doorgaat.</value>
+  </data>
   <data name="VoiceSettingsPage_TestVoiceButtonText.Text" xml:space="preserve">
     <value>Spraakinvoer testen</value>
   </data>

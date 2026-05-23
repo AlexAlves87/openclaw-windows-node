@@ -2910,6 +2910,12 @@
   <data name="Chat_Notification_ConnectionInterrupted" xml:space="preserve">
     <value>连接已断开 — 回复已中断。</value>
   </data>
+  <data name="Chat_Notification_KeylessEventDropped" xml:space="preserve">
+    <value>已丢弃网关时间线事件</value>
+  </data>
+  <data name="Chat_Notification_KeylessEventDroppedMessage" xml:space="preserve">
+    <value>网关发送了缺少会话键的聊天时间线事件，OpenClaw 已将其忽略，以避免混淆时间线。如果此情况持续，请更新或重启网关。</value>
+  </data>
   <data name="VoiceSettingsPage_TestVoiceButtonText.Text" xml:space="preserve">
     <value>æµ‹è¯•è¯­éŸ³è¾“å…¥</value>
   </data>

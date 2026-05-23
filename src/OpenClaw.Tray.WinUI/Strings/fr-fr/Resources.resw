@@ -2910,6 +2910,12 @@ Sur votre hôte passerelle (Mac/Linux), exécutez :
   <data name="Chat_Notification_ConnectionInterrupted" xml:space="preserve">
     <value>Connexion perdue — réponse interrompue.</value>
   </data>
+  <data name="Chat_Notification_KeylessEventDropped" xml:space="preserve">
+    <value>Événement de chronologie de passerelle ignoré</value>
+  </data>
+  <data name="Chat_Notification_KeylessEventDroppedMessage" xml:space="preserve">
+    <value>La passerelle a envoyé un événement de chronologie de chat sans clé de session ; OpenClaw l'a ignoré pour éviter de mélanger les conversations. Mettez à jour ou redémarrez la passerelle si cela continue.</value>
+  </data>
   <data name="VoiceSettingsPage_TestVoiceButtonText.Text" xml:space="preserve">
     <value>Tester la saisie vocale</value>
   </data>

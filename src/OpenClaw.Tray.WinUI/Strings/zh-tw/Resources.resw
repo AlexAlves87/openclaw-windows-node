@@ -2910,6 +2910,12 @@
   <data name="Chat_Notification_ConnectionInterrupted" xml:space="preserve">
     <value>連線已中斷 — 回覆已中斷。</value>
   </data>
+  <data name="Chat_Notification_KeylessEventDropped" xml:space="preserve">
+    <value>已捨棄閘道時間軸事件</value>
+  </data>
+  <data name="Chat_Notification_KeylessEventDroppedMessage" xml:space="preserve">
+    <value>閘道傳送了缺少工作階段金鑰的聊天時間軸事件，OpenClaw 已將其忽略，以避免混淆時間軸。如果此情況持續，請更新或重新啟動閘道。</value>
+  </data>
   <data name="VoiceSettingsPage_TestVoiceButtonText.Text" xml:space="preserve">
     <value>æ¸¬è©¦èªžéŸ³è¼¸å…¥</value>
   </data>

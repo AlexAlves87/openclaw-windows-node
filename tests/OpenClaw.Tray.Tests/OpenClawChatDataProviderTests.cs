@@ -1987,6 +1987,17 @@ public class OpenClawChatDataProviderTests
         return (bridge, provider, snapshots);
     }
 
+    private static (FakeBridge bridge, OpenClawChatDataProvider provider, List<ChatDataSnapshot> snapshots, List<ChatProviderNotification> notifications)
+        CreateConnectedProviderWithNotifications(string canonicalMainKey = "agent:main:main")
+    {
+        var (bridge, provider, snapshots, notifications) = CreateProvider();
+        bridge.HasHandshakeSnapshot = true;
+        bridge.MainSessionKey = canonicalMainKey;
+        bridge.RaiseStatus(ConnectionStatus.Connected);
+        bridge.RaiseSessions(Array.Empty<SessionInfo>());
+        return (bridge, provider, snapshots, notifications);
+    }
+
     [Fact]
     public async Task SendMessageAsync_FreshInstall_OptimisticEntryKeyedByCanonicalSessionKey()
     {
@@ -2062,10 +2073,9 @@ public class OpenClawChatDataProviderTests
         // of the bug: it would silently route mis-routed events to a synthetic
         // bucket. The fix is to drop the event and log — surfacing protocol
         // bugs instead of papering over them.
-        var (bridge, provider, snapshots) = CreateConnectedProvider("agent:main:main");
+        var (bridge, provider, snapshots, notifications) = CreateConnectedProviderWithNotifications("agent:main:main");
         await provider.LoadAsync();
         await provider.SendMessageAsync("agent:main:main", "hi");
-        var snapshotCountBefore = snapshots.Count;
 
         bridge.RaiseChat(new ChatMessageInfo
         {
@@ -2074,9 +2084,70 @@ public class OpenClawChatDataProviderTests
             Text = "echo with no session key — should be dropped"
         });
 
-        Assert.Equal(snapshotCountBefore, snapshots.Count);
         // And specifically: no synthetic "main" timeline was created.
-        Assert.False(snapshots[^1].Timelines.ContainsKey("main"));
+        var latest = snapshots[^1];
+        var timeline = latest.Timelines["agent:main:main"];
+        Assert.False(latest.Timelines.ContainsKey("main"));
+        Assert.DoesNotContain(timeline.Entries, e => e.Text.Contains("echo with no session key"));
+        Assert.Contains(timeline.Entries, e =>
+            e.Kind == ChatTimelineItemKind.Status &&
+            e.Tone == ChatTone.Warning &&
+            e.Text == "Chat_Notification_KeylessEventDroppedMessage");
+        Assert.Single(notifications, n => n.Title == "Chat_Notification_KeylessEventDropped");
+        Assert.DoesNotContain(notifications, n =>
+            (n.Title?.Contains("echo with no session key") ?? false) ||
+            (n.Message?.Contains("echo with no session key") ?? false));
+    }
+
+    [Fact]
+    public async Task KeylessEvents_RaiseOnlyOneDiagnostic()
+    {
+        var (bridge, provider, snapshots, notifications) = CreateConnectedProviderWithNotifications("agent:main:main");
+        await provider.LoadAsync();
+
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "",
+            Role = "assistant",
+            Text = "first dropped payload"
+        });
+        bridge.RaiseAgent(MakeAgentEvent("assistant", """{"delta":"second dropped payload"}""", sessionKey: ""));
+        bridge.RaiseChat(new ChatMessageInfo
+        {
+            SessionKey = "",
+            Role = "assistant",
+            Text = "third dropped payload"
+        });
+
+        Assert.Single(notifications, n => n.Title == "Chat_Notification_KeylessEventDropped");
+        Assert.Single(snapshots[^1].Timelines["agent:main:main"].Entries, e =>
+            e.Kind == ChatTimelineItemKind.Status &&
+            e.Text == "Chat_Notification_KeylessEventDroppedMessage");
+        Assert.DoesNotContain(notifications, n =>
+            (n.Title?.Contains("dropped payload") ?? false) ||
+            (n.Message?.Contains("dropped payload") ?? false));
+    }
+
+    [Fact]
+    public async Task AgentEvent_WithEmptySessionKey_IsDroppedAndDiagnosed()
+    {
+        var (bridge, provider, snapshots, notifications) = CreateConnectedProviderWithNotifications("agent:main:main");
+        await provider.LoadAsync();
+
+        bridge.RaiseAgent(MakeAgentEvent("assistant", """{"delta":"secret agent payload"}""", sessionKey: ""));
+
+        var latest = snapshots[^1];
+        var timeline = latest.Timelines["agent:main:main"];
+        Assert.False(latest.Timelines.ContainsKey("main"));
+        Assert.DoesNotContain(timeline.Entries, e => e.Text.Contains("secret agent payload"));
+        Assert.Contains(timeline.Entries, e =>
+            e.Kind == ChatTimelineItemKind.Status &&
+            e.Tone == ChatTone.Warning &&
+            e.Text == "Chat_Notification_KeylessEventDroppedMessage");
+        Assert.Single(notifications, n => n.Title == "Chat_Notification_KeylessEventDropped");
+        Assert.DoesNotContain(notifications, n =>
+            (n.Title?.Contains("secret agent payload") ?? false) ||
+            (n.Message?.Contains("secret agent payload") ?? false));
     }
 
     [Fact]
