@@ -635,6 +635,35 @@ public class ExecApprovalsCoordinatorTests : IDisposable
         Assert.NotNull(resolvedAfter.Allowlist[0].LastResolvedPath);
     }
 
+    // Regression: wildcard-authorized hit must record lastUsed* on the wildcard bucket entry.
+    // ResolveReadOnly merges agents["*"] into the resolved allowlist for any concrete agent,
+    // so a request from "main" can be allow-matched by an entry living under "*". The store's
+    // record path must follow the same source — otherwise wildcard-authorized executions never
+    // accumulate usage metadata.
+    [Fact]
+    public async Task WildcardAllowlistHit_RecordsUseOnWildcardBucketEntry()
+    {
+        WriteStoreFile("""
+        {
+          "version": 1,
+          "agents": {
+            "*": {
+              "security": "allowlist",
+              "ask": "off",
+              "allowlist": [{ "pattern": "**/cmd.exe" }]
+            }
+          }
+        }
+        """);
+
+        var result = await MakeCoordinator().HandleAsync(Req("""{"command":["cmd"]}"""), "wildcard-1");
+
+        Assert.True(result.IsAllow);
+        var json = File.ReadAllText(Path.Combine(_dir, "exec-approvals.json"));
+        Assert.Contains("\"lastUsedCommand\"", json);
+        Assert.Contains("\"lastResolvedPath\"", json);
+    }
+
     // ── Test doubles ──────────────────────────────────────────────────────────
 
     private sealed class FixedDecisionPromptHandler : IExecApprovalV2PromptHandler

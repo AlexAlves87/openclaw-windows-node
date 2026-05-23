@@ -98,25 +98,32 @@ public sealed class ExecApprovalsStore
     // Updates lastUsed* metadata for every allowlist entry whose pattern matches.
     // Best-effort: never throws. No-op if the agent or pattern is not found.
     // Returns true if at least one entry was updated and saved; false otherwise.
+    // Searches both the concrete agent bucket and the wildcard bucket ("*"),
+    // because ResolveReadOnly merges wildcard entries into the resolved allowlist —
+    // so a hit can be authorized by either source and metadata must follow.
     public Task<bool> RecordAllowlistUseAsync(
         string? agentId, string pattern, string command, string? resolvedPath)
     {
         if (string.IsNullOrEmpty(pattern)) return Task.FromResult(false);
         var key = NormalizeAgentId(agentId);
+        var buckets = key == "*" ? new[] { "*" } : new[] { key, "*" };
         return UpdateFileAsync(file =>
         {
-            if (!file.Agents!.TryGetValue(key, out var agent) || agent?.Allowlist is null)
-                return false;
             var changed = false;
-            foreach (var entry in agent.Allowlist)
+            foreach (var bucketKey in buckets)
             {
-                if (!string.Equals(entry.Pattern?.Trim(), pattern.Trim(),
-                        StringComparison.OrdinalIgnoreCase))
+                if (!file.Agents!.TryGetValue(bucketKey, out var agent) || agent?.Allowlist is null)
                     continue;
-                entry.LastUsedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                entry.LastUsedCommand = command;        // STJ escapes control chars on serialize
-                entry.LastResolvedPath = resolvedPath;  // Id and Pattern preserved
-                changed = true;
+                foreach (var entry in agent.Allowlist)
+                {
+                    if (!string.Equals(entry.Pattern?.Trim(), pattern.Trim(),
+                            StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    entry.LastUsedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    entry.LastUsedCommand = command;        // STJ escapes control chars on serialize
+                    entry.LastResolvedPath = resolvedPath;  // Id and Pattern preserved
+                    changed = true;
+                }
             }
             return changed;
         });

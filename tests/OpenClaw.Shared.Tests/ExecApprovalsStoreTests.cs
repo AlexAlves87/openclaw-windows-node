@@ -895,6 +895,58 @@ public class ExecApprovalsStoreTests : IDisposable
         Assert.Null(allowlist.First(e => e.Pattern == "**/rg.exe").LastUsedCommand);
     }
 
+    // ResolveReadOnly merges wildcard entries into the resolved allowlist, so a hit can be
+    // authorized by agents["*"]. RecordAllowlistUseAsync must follow the same source.
+    [Fact]
+    public async Task RecordAllowlistUseAsync_WildcardBucketOnly_UpdatesMetadata()
+    {
+        var id = Guid.NewGuid();
+        WriteFile($$"""
+        {
+          "version": 1,
+          "agents": {
+            "*": {
+              "allowlist": [
+                { "id": "{{id}}", "pattern": "**/git.exe" }
+              ]
+            }
+          }
+        }
+        """);
+        var store = Store();
+        var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", "git status", "/usr/bin/git");
+
+        Assert.True(result);
+        var entry = store.ResolveReadOnly("main").Allowlist.Single();
+        Assert.Equal(id, entry.Id);
+        Assert.Equal("git status", entry.LastUsedCommand);
+        Assert.Equal("/usr/bin/git", entry.LastResolvedPath);
+        Assert.NotNull(entry.LastUsedAt);
+    }
+
+    // Same pattern in both buckets: both entries get metadata updated. The matcher cannot
+    // tell them apart structurally, and metadata is informative — not authorization-bearing.
+    [Fact]
+    public async Task RecordAllowlistUseAsync_PatternInBothBuckets_UpdatesBoth()
+    {
+        WriteFile("""
+        {
+          "version": 1,
+          "agents": {
+            "main": { "allowlist": [{ "pattern": "**/git.exe" }] },
+            "*":    { "allowlist": [{ "pattern": "**/git.exe" }] }
+          }
+        }
+        """);
+        var store = Store();
+        var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", "git status", null);
+
+        Assert.True(result);
+        var json = File.ReadAllText(FilePath);
+        var lastUsedCount = System.Text.RegularExpressions.Regex.Matches(json, "\"lastUsedCommand\"").Count;
+        Assert.Equal(2, lastUsedCount);
+    }
+
     [Fact]
     public async Task RecordAllowlistUseAsync_BestEffort_IoExceptionReturnsFalse()
     {
