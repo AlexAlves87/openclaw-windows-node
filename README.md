@@ -1,3 +1,5 @@
+![OpenClaw Windows Node banner](docs/assets/readme-banner.jpg)
+
 # 🦞 OpenClaw Windows Hub
 
 A Windows companion suite for [OpenClaw](https://openclaw.ai) - the AI-powered personal assistant.
