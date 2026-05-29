@@ -46,7 +46,10 @@ function Get-ExecutableClassification {
 
     switch -Regex ($RelativePath) {
         '^OpenClaw\.Tray\.WinUI\.exe$' { return "OpenClawOwned" }
+        '^SetupEngine\\OpenClaw\.SetupEngine\.exe$' { return "OpenClawOwned" }
         '^SetupEngine\\OpenClaw\.SetupEngine\.UI\.exe$' { return "OpenClawOwned" }
+        '(^|\\)createdump\.exe$' { return "ThirdPartyExcluded" }
+        '(^|\\)RestartAgent\.exe$' { return "ThirdPartyExcluded" }
         '^tools\\mxc\\[^\\]+\\wxc-exec\.exe$' { return "ThirdPartyExcluded" }
         default { return "Unknown" }
     }
@@ -96,6 +99,9 @@ foreach ($exe in $executables) {
 
 if (-not ($executables | Where-Object RelativePath -eq "OpenClaw.Tray.WinUI.exe")) {
     $errors.Add("Missing OpenClaw.Tray.WinUI.exe.")
+}
+if (-not ($executables | Where-Object RelativePath -eq "SetupEngine\OpenClaw.SetupEngine.exe")) {
+    $errors.Add("Missing SetupEngine\OpenClaw.SetupEngine.exe.")
 }
 if (-not ($executables | Where-Object RelativePath -eq "SetupEngine\OpenClaw.SetupEngine.UI.exe")) {
     $errors.Add("Missing SetupEngine\OpenClaw.SetupEngine.UI.exe.")

@@ -402,6 +402,7 @@ jobs:
       run: |
         New-Item -ItemType Directory -Path signing-input -Force | Out-Null
         New-Item -ItemType HardLink -Path signing-input\OpenClaw.Tray.WinUI.exe -Target publish\OpenClaw.Tray.WinUI.exe | Out-Null
+        New-Item -ItemType HardLink -Path signing-input\OpenClaw.SetupEngine.exe -Target publish\SetupEngine\OpenClaw.SetupEngine.exe | Out-Null
         New-Item -ItemType HardLink -Path signing-input\OpenClaw.SetupEngine.UI.exe -Target publish\SetupEngine\OpenClaw.SetupEngine.UI.exe | Out-Null
 
     - name: Sign OpenClaw Executables
@@ -592,6 +593,7 @@ jobs:
       run: |
         New-Item -ItemType Directory -Path signing-input-arm64 -Force | Out-Null
         New-Item -ItemType HardLink -Path signing-input-arm64\OpenClaw.Tray.WinUI.exe -Target artifacts\tray-win-arm64\OpenClaw.Tray.WinUI.exe | Out-Null
+        New-Item -ItemType HardLink -Path signing-input-arm64\OpenClaw.SetupEngine.exe -Target artifacts\tray-win-arm64\SetupEngine\OpenClaw.SetupEngine.exe | Out-Null
         New-Item -ItemType HardLink -Path signing-input-arm64\OpenClaw.SetupEngine.UI.exe -Target artifacts\tray-win-arm64\SetupEngine\OpenClaw.SetupEngine.UI.exe | Out-Null
 
     - name: Sign ARM64 OpenClaw Executables
