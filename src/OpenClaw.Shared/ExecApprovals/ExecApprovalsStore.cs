@@ -102,7 +102,7 @@ public sealed class ExecApprovalsStore
     // because ResolveReadOnly merges wildcard entries into the resolved allowlist —
     // so a hit can be authorized by either source and metadata must follow.
     public Task<bool> RecordAllowlistUseAsync(
-        string? agentId, string pattern, string command, string? resolvedPath)
+        string? agentId, string pattern, string? resolvedPath)
     {
         if (string.IsNullOrEmpty(pattern)) return Task.FromResult(false);
         var key = NormalizeAgentId(agentId);
@@ -120,7 +120,6 @@ public sealed class ExecApprovalsStore
                             StringComparison.OrdinalIgnoreCase))
                         continue;
                     entry.LastUsedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    entry.LastUsedCommand = command;        // STJ escapes control chars on serialize
                     entry.LastResolvedPath = resolvedPath;  // Id and Pattern preserved
                     changed = true;
                 }
@@ -371,7 +370,6 @@ public sealed class ExecApprovalsStore
                 Id = entry.Id,
                 Pattern = pattern,
                 LastUsedAt = entry.LastUsedAt,
-                LastUsedCommand = entry.LastUsedCommand,
                 LastResolvedPath = entry.LastResolvedPath,
             });
         }

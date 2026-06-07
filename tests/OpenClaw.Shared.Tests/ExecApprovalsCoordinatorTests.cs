@@ -482,7 +482,7 @@ public class ExecApprovalsCoordinatorTests : IDisposable
         Assert.DoesNotContain("allowlist", json, StringComparison.OrdinalIgnoreCase);
     }
 
-    // C. Pre-approved path (pass1 = Allow) → RecordAllowlistUse fires and updates LastUsedCommand.
+    // C. Pre-approved path (pass1 = Allow) → RecordAllowlistUse fires and updates LastUsedAt.
     [Fact]
     public async Task AllowPreapproved_RecordsAllowlistUse()
     {
@@ -503,7 +503,7 @@ public class ExecApprovalsCoordinatorTests : IDisposable
         Assert.True(result.IsAllow);
         var resolved = new ExecApprovalsStore(_dir, NullLogger.Instance).ResolveReadOnly("main");
         Assert.Single(resolved.Allowlist);
-        Assert.NotNull(resolved.Allowlist[0].LastUsedCommand);
+        Assert.NotNull(resolved.Allowlist[0].LastUsedAt);
     }
 
     // D. AllowOnce → persistAllowlistEntry=false, no entry written.
@@ -562,7 +562,7 @@ public class ExecApprovalsCoordinatorTests : IDisposable
         Assert.True(result.IsAllow);
         var resolved = new ExecApprovalsStore(_dir, NullLogger.Instance).ResolveReadOnly("main");
         Assert.Single(resolved.Allowlist);
-        Assert.NotNull(resolved.Allowlist[0].LastUsedCommand);
+        Assert.NotNull(resolved.Allowlist[0].LastUsedAt);
     }
 
     // G. Fallback path (canPresent=false) + AllowlistSatisfied=true → RecordAllowlistUse fires.
@@ -590,7 +590,7 @@ public class ExecApprovalsCoordinatorTests : IDisposable
         Assert.True(result.IsAllow);
         var resolved = new ExecApprovalsStore(_dir, NullLogger.Instance).ResolveReadOnly("main");
         Assert.Single(resolved.Allowlist);
-        Assert.NotNull(resolved.Allowlist[0].LastUsedCommand);
+        Assert.NotNull(resolved.Allowlist[0].LastUsedAt);
     }
 
     // End-to-end coordinator/store runtime proof using real filesystem I/O.
@@ -631,7 +631,6 @@ public class ExecApprovalsCoordinatorTests : IDisposable
         Assert.Single(resolvedAfter.Allowlist);
         Assert.NotNull(resolvedAfter.Allowlist[0].Pattern);
         Assert.NotNull(resolvedAfter.Allowlist[0].LastUsedAt);
-        Assert.NotNull(resolvedAfter.Allowlist[0].LastUsedCommand);
         Assert.NotNull(resolvedAfter.Allowlist[0].LastResolvedPath);
     }
 
@@ -660,7 +659,7 @@ public class ExecApprovalsCoordinatorTests : IDisposable
 
         Assert.True(result.IsAllow);
         var json = File.ReadAllText(Path.Combine(_dir, "exec-approvals.json"));
-        Assert.Contains("\"lastUsedCommand\"", json);
+        Assert.Contains("\"lastUsedAt\"", json);
         Assert.Contains("\"lastResolvedPath\"", json);
     }
 

@@ -98,8 +98,9 @@ public sealed class ExecApprovalsCoordinator : IExecApprovalV2Handler
         if (pass1 is ExecHostPolicyDecision.AllowOutcome)
         {
             // Pre-approved path (security=Full, ask=Off or allowlist satisfied): skip prompt.
-            // Side effects fire before the log line, after the final allow decision is confirmed.
-            await RecordAllowlistUsageAsync(context).ConfigureAwait(false);
+            // Side effects are best-effort: a metadata write failure must not flip an allow to a deny.
+            try { await RecordAllowlistUsageAsync(context).ConfigureAwait(false); }
+            catch (Exception ex) { _logger.Warn($"[EXEC-APPROVALS] [{correlationId}] side-effect: record-usage failed (non-fatal): {ex.Message}"); }
             _logger.Info($"[EXEC-APPROVALS] [{correlationId}] path=new " +
                 $"canonical=\"{SanitizeForLog(context.DisplayCommand)}\" decision=allow " +
                 $"reason=approved fallbackUsed=false promptAttempted=false");
@@ -184,9 +185,14 @@ public sealed class ExecApprovalsCoordinator : IExecApprovalV2Handler
         }
 
         // Step 8: side effects — strictly after the final allow decision.
+        // Each side effect is independently best-effort so a failure in one does not skip the other.
         if (persistAllowlistEntry && context.Security == ExecSecurity.Allowlist)
-            await PersistAllowlistEntriesAsync(context).ConfigureAwait(false);
-        await RecordAllowlistUsageAsync(context).ConfigureAwait(false);
+        {
+            try { await PersistAllowlistEntriesAsync(context).ConfigureAwait(false); }
+            catch (Exception ex) { _logger.Warn($"[EXEC-APPROVALS] [{correlationId}] side-effect: persist-entry failed (non-fatal): {ex.Message}"); }
+        }
+        try { await RecordAllowlistUsageAsync(context).ConfigureAwait(false); }
+        catch (Exception ex) { _logger.Warn($"[EXEC-APPROVALS] [{correlationId}] side-effect: record-usage failed (non-fatal): {ex.Message}"); }
 
         // Step 9: final allow log
         _logger.Info($"[EXEC-APPROVALS] [{correlationId}] path=new " +
@@ -235,7 +241,7 @@ public sealed class ExecApprovalsCoordinator : IExecApprovalV2Handler
                 ? context.AllowlistResolutions[i].ResolvedPath
                 : null;
             await _store.RecordAllowlistUseAsync(
-                context.AgentId, pattern, context.DisplayCommand, resolvedPath)
+                context.AgentId, pattern, resolvedPath)
                 .ConfigureAwait(false);
         }
     }

@@ -821,14 +821,13 @@ public class ExecApprovalsStoreTests : IDisposable
         }
         """);
         var store = Store();
-        var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", "git status", "/usr/bin/git");
+        var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", "/usr/bin/git");
 
         Assert.True(result);
         var entry = store.ResolveReadOnly("main").Allowlist[0];
         Assert.Equal(id, entry.Id);
         Assert.Equal("**/git.exe", entry.Pattern);
         Assert.NotNull(entry.LastUsedAt);
-        Assert.Equal("git status", entry.LastUsedCommand);
         Assert.Equal("/usr/bin/git", entry.LastResolvedPath);
     }
 
@@ -844,10 +843,10 @@ public class ExecApprovalsStoreTests : IDisposable
         }
         """);
         var store = Store();
-        var result = await store.RecordAllowlistUseAsync("main", "**/rg.exe", "rg foo", null);
+        var result = await store.RecordAllowlistUseAsync("main", "**/rg.exe", null);
 
         Assert.False(result);
-        Assert.Null(store.ResolveReadOnly("main").Allowlist[0].LastUsedCommand);
+        Assert.Null(store.ResolveReadOnly("main").Allowlist[0].LastUsedAt);
     }
 
     [Fact]
@@ -855,7 +854,7 @@ public class ExecApprovalsStoreTests : IDisposable
     {
         WriteFile("""{"version":1,"agents":{}}""");
         var store = Store();
-        var result = await store.RecordAllowlistUseAsync("nonexistent", "**/git.exe", "git status", null);
+        var result = await store.RecordAllowlistUseAsync("nonexistent", "**/git.exe", null);
 
         Assert.False(result);
     }
@@ -865,7 +864,7 @@ public class ExecApprovalsStoreTests : IDisposable
     {
         WriteFile("{ bad json }");
         var store = Store();
-        var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", "git status", null);
+        var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", null);
 
         Assert.False(result);
         Assert.Equal("{ bad json }", File.ReadAllText(FilePath));
@@ -888,11 +887,11 @@ public class ExecApprovalsStoreTests : IDisposable
         }
         """);
         var store = Store();
-        await store.RecordAllowlistUseAsync("main", "**/git.exe", "git status", null);
+        await store.RecordAllowlistUseAsync("main", "**/git.exe", null);
 
         var allowlist = store.ResolveReadOnly("main").Allowlist;
-        Assert.NotNull(allowlist.First(e => e.Pattern == "**/git.exe").LastUsedCommand);
-        Assert.Null(allowlist.First(e => e.Pattern == "**/rg.exe").LastUsedCommand);
+        Assert.NotNull(allowlist.First(e => e.Pattern == "**/git.exe").LastUsedAt);
+        Assert.Null(allowlist.First(e => e.Pattern == "**/rg.exe").LastUsedAt);
     }
 
     // ResolveReadOnly merges wildcard entries into the resolved allowlist, so a hit can be
@@ -914,12 +913,11 @@ public class ExecApprovalsStoreTests : IDisposable
         }
         """);
         var store = Store();
-        var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", "git status", "/usr/bin/git");
+        var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", "/usr/bin/git");
 
         Assert.True(result);
         var entry = store.ResolveReadOnly("main").Allowlist.Single();
         Assert.Equal(id, entry.Id);
-        Assert.Equal("git status", entry.LastUsedCommand);
         Assert.Equal("/usr/bin/git", entry.LastResolvedPath);
         Assert.NotNull(entry.LastUsedAt);
     }
@@ -939,11 +937,11 @@ public class ExecApprovalsStoreTests : IDisposable
         }
         """);
         var store = Store();
-        var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", "git status", null);
+        var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", null);
 
         Assert.True(result);
         var json = File.ReadAllText(FilePath);
-        var lastUsedCount = System.Text.RegularExpressions.Regex.Matches(json, "\"lastUsedCommand\"").Count;
+        var lastUsedCount = System.Text.RegularExpressions.Regex.Matches(json, "\"lastUsedAt\"").Count;
         Assert.Equal(2, lastUsedCount);
     }
 
@@ -969,7 +967,7 @@ public class ExecApprovalsStoreTests : IDisposable
         // because the target is open without write/delete sharing → IOException degraded-save path.
         using (var fs = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
         {
-            var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", "git status", null);
+            var result = await store.RecordAllowlistUseAsync("main", "**/git.exe", null);
             Assert.False(result);           // IOException absorbed, no exception escaped
             Assert.NotEmpty(_log.Warnings); // write failure logged as Warn
         }
@@ -996,7 +994,7 @@ public class ExecApprovalsStoreTests : IDisposable
         var store = Store();
         await store.AddAllowlistEntryAsync("main", "**/git.exe");
         // lastUsedAt is absent on creation; RecordAllowlistUseAsync stamps it on first use.
-        await store.RecordAllowlistUseAsync("main", "**/git.exe", "git status", null);
+        await store.RecordAllowlistUseAsync("main", "**/git.exe", null);
 
         var json = File.ReadAllText(FilePath);
         using var doc = System.Text.Json.JsonDocument.Parse(json); // valid JSON
@@ -1006,6 +1004,8 @@ public class ExecApprovalsStoreTests : IDisposable
             .GetProperty("agents").GetProperty("main")
             .GetProperty("allowlist")[0].GetProperty("lastUsedAt");
         Assert.Equal(System.Text.Json.JsonValueKind.Number, lastUsedAt.ValueKind);
+        // lastUsedCommand must never appear in the persisted file (security regression guard).
+        Assert.DoesNotContain("lastUsedCommand", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
