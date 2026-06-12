@@ -200,6 +200,11 @@ internal sealed class SetupOpenClawLogger(SetupLogger logger) : IOpenClawLogger
 {
     public void Info(string message) => logger.Info($"[WS] {message}");
     public void Debug(string message) => logger.Debug($"[WS] {message}");
+    // Trace intentionally drops to the default no-op: setup-engine sessions
+    // are short-lived and don't normally drive agent-event traffic, and there
+    // is no OPENCLAW_TRAY_TRACE-style opt-in gate available here. Letting the
+    // interface default (no-op) apply keeps verbose lines out of setup logs.
+    public void Trace(string message) { }
     public void Warn(string message) => logger.Warn($"[WS] {message}");
     public void Error(string message, Exception? ex = null) => logger.Error($"[WS] {message}{(ex != null ? $": {ex}" : "")}");
 }
@@ -371,7 +376,7 @@ public sealed class CleanupStaleGatewayStep : SetupStep
         }
 
         // Remove stale gateway record for our local URL if it exists
-        var registry = new GatewayRegistry(ctx.DataDir);
+        var registry = new GatewayRegistry(ctx.DataDir, logger: new SetupOpenClawLogger(ctx.Logger));
         registry.Load();
         var existing = registry.FindByUrl(ctx.GatewayUrl!);
         if (existing != null)
@@ -1646,7 +1651,7 @@ public sealed class PairOperatorStep : SetupStep
             return StepResult.Terminal("No credential available for operator pairing");
 
         // Register gateway in registry (only once — reuse across retries)
-        var registry = new GatewayRegistry(ctx.DataDir);
+        var registry = new GatewayRegistry(ctx.DataDir, logger: new SetupOpenClawLogger(ctx.Logger));
         registry.Load();
 
         string identityPath;
@@ -1952,7 +1957,7 @@ public sealed class PairOperatorStep : SetupStep
 
     public override async Task RollbackAsync(SetupContext ctx, CancellationToken ct)
     {
-        var registry = new GatewayRegistry(ctx.DataDir);
+        var registry = new GatewayRegistry(ctx.DataDir, logger: new SetupOpenClawLogger(ctx.Logger));
         registry.Load();
 
         // Find all local gateway records to remove (mirrors old uninstall step 6a)
@@ -2067,7 +2072,7 @@ public sealed class PairNodeStep : SetupStep
         if (string.IsNullOrEmpty(token))
             return StepResult.Terminal("No credential available for node pairing");
 
-        var registry = new GatewayRegistry(ctx.DataDir);
+        var registry = new GatewayRegistry(ctx.DataDir, logger: new SetupOpenClawLogger(ctx.Logger));
         registry.Load();
         var record = registry.GetById(ctx.GatewayRecordId!);
         if (record == null)
@@ -2363,7 +2368,7 @@ public sealed class PairNodeStep : SetupStep
     {
         // Null node device token (mirrors old uninstall step 7 for node role)
         // Only clear if no external gateways remain (same logic as PairOperatorStep)
-        var registry = new GatewayRegistry(ctx.DataDir);
+        var registry = new GatewayRegistry(ctx.DataDir, logger: new SetupOpenClawLogger(ctx.Logger));
         registry.Load();
         var hasExternalGateways = registry.GetAll().Any(r =>
             !r.IsLocal && !(r.SshTunnel is null && LocalGatewayUrlClassifier.IsLocalGatewayUrl(r.Url)));
@@ -2401,7 +2406,7 @@ public sealed class VerifyEndToEndStep : SetupStep
             return StepResult.Fail("Gateway is not running");
 
         // Verify registry state
-        var registry = new GatewayRegistry(ctx.DataDir);
+        var registry = new GatewayRegistry(ctx.DataDir, logger: new SetupOpenClawLogger(ctx.Logger));
         registry.Load();
         var record = registry.GetById(ctx.GatewayRecordId!);
         if (record == null)
@@ -2570,7 +2575,7 @@ public sealed class VerifyEndToEndStep : SetupStep
         if (string.IsNullOrWhiteSpace(ctx.GatewayRecordId))
             return;
 
-        var registry = new GatewayRegistry(ctx.DataDir);
+        var registry = new GatewayRegistry(ctx.DataDir, logger: new SetupOpenClawLogger(ctx.Logger));
         registry.Load();
         var record = registry.GetById(ctx.GatewayRecordId);
         if (record is null)
@@ -2692,7 +2697,7 @@ public sealed class VerifyEndToEndStep : SetupStep
             History = Array.Empty<object>()
         };
 
-        var json = System.Text.Json.JsonSerializer.Serialize(state, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var json = System.Text.Json.JsonSerializer.Serialize(state, SetupConfig.JsonWriteOptions);
         await AtomicFile.WriteAllTextAsync(statePath, json, ct);
         ctx.Logger.Info($"Wrote setup-state.json: DistroName={ctx.DistroName}");
     }
@@ -2716,7 +2721,7 @@ public sealed class StartKeepaliveStep : SetupStep
         ctx.Logger.Info($"Launching persistent keepalive for distro: {distro}");
 
         var markerPath = GetKeepaliveMarkerPath(ctx);
-        if (TryGetExistingKeepalive(markerPath, distro, out var existingPid))
+        if (TryGetExistingKeepalive(markerPath, distro, out var existingPid, new SetupOpenClawLogger(ctx.Logger)))
         {
             ctx.Logger.Info($"Keepalive already running for distro '{distro}' (PID {existingPid})");
             return Task.FromResult(StepResult.Ok("Keepalive already running"));
@@ -2724,7 +2729,8 @@ public sealed class StartKeepaliveStep : SetupStep
 
         if (File.Exists(markerPath))
         {
-            try { File.Delete(markerPath); } catch { }
+            try { File.Delete(markerPath); }
+            catch (Exception ex) { ctx.Logger.Debug($"[Keepalive] Stale marker delete failed: {ex.Message}"); }
         }
 
         // Launch detached keepalive process — keeps the distro alive so port forwarding
@@ -2765,7 +2771,7 @@ public sealed class StartKeepaliveStep : SetupStep
             StartTimeUtc = DateTimeOffset.UtcNow,
             ProcessName = "wsl"
         };
-        var json = System.Text.Json.JsonSerializer.Serialize(marker, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var json = System.Text.Json.JsonSerializer.Serialize(marker, SetupConfig.JsonWriteOptions);
         AtomicFile.WriteAllText(markerPath, json);
         ctx.Logger.Info($"Wrote keepalive marker: {markerPath}");
     }
@@ -2774,7 +2780,7 @@ public sealed class StartKeepaliveStep : SetupStep
         => Path.Combine(
             ctx.LocalDataDir, "wsl-keepalive", $"{ctx.DistroName}.json");
 
-    internal static bool TryGetExistingKeepalive(string markerPath, string distro, out int pid)
+    internal static bool TryGetExistingKeepalive(string markerPath, string distro, out int pid, IOpenClawLogger? logger = null)
     {
         pid = 0;
         if (!File.Exists(markerPath))
@@ -2792,11 +2798,15 @@ public sealed class StartKeepaliveStep : SetupStep
                 if (process.HasExited)
                     return false;
 
-                return IsKeepaliveCommandLine(GetProcessCommandLine(pid), distro);
+                return IsKeepaliveCommandLine(GetProcessCommandLine(pid, logger), distro);
             }
         }
-        catch
+        catch (Exception ex)
         {
+            // TryGetExistingKeepalive returns false on any failure (file/process
+            // missing or unreadable). Static method — no ctx.Logger available.
+            // Debug-level via Trace so the failure is visible in dev diagnostics.
+            System.Diagnostics.Trace.WriteLine($"[Keepalive] TryGetExistingKeepalive failed: {ex.Message}");
             pid = 0;
             return false;
         }
@@ -2823,7 +2833,7 @@ public sealed class StartKeepaliveStep : SetupStep
                 try
                 {
                     // Read command line via WMI/CIM
-                    var cmdLine = GetProcessCommandLine(proc.Id);
+                    var cmdLine = GetProcessCommandLine(proc.Id, new SetupOpenClawLogger(ctx.Logger));
                     if (IsKeepaliveCommandLine(cmdLine, distro))
                     {
                         proc.Kill(entireProcessTree: true);
@@ -2831,7 +2841,7 @@ public sealed class StartKeepaliveStep : SetupStep
                         ctx.Logger.Info($"[Uninstall] Killed keepalive process tree PID {proc.Id}");
                     }
                 }
-                catch { /* process may have exited */ }
+                catch (Exception ex) { ctx.Logger.Debug($"[Uninstall] Keepalive proc {proc.Id} cleanup skipped (may have exited): {ex.Message}"); }
                 finally { proc.Dispose(); }
             }
         }
@@ -2870,7 +2880,7 @@ public sealed class StartKeepaliveStep : SetupStep
             && commandLine.Contains("infinity", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? GetProcessCommandLine(int pid)
+    private static string? GetProcessCommandLine(int pid, IOpenClawLogger? logger = null)
     {
         try
         {
@@ -2889,7 +2899,11 @@ public sealed class StartKeepaliveStep : SetupStep
             p.WaitForExit(5000);
             return output.Trim();
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            SetupDiagnostics.TryWriteStderrWarning($"Failed to query command line for process {pid}: {ex.Message}");
+            return null;
+        }
     }
 }
 

@@ -465,9 +465,9 @@ public sealed partial class ConnectionPage : Page
             return;
         }
 
-        GatewayHostControlsTitleText.Text = "WSL gateway";
-        GatewayHostControlsDescriptionText.Text =
-            $"Open a shell or manage the local gateway service in {_activeHostAccessPlan.DistroName}.";
+        GatewayHostControlsDescriptionText.Text = LocalizationHelper.Format(
+            "ConnectionPage_GatewayHostControlsDescription_Format",
+            _activeHostAccessPlan.DistroName);
         GatewayHostOpenTerminalButton.IsEnabled = !_gatewayHostActionInProgress && _activeHostAccessPlan.CanOpenTerminal;
         GatewayHostStartButton.IsEnabled = !_gatewayHostActionInProgress;
         GatewayHostStopButton.IsEnabled = !_gatewayHostActionInProgress;
@@ -478,6 +478,9 @@ public sealed partial class ConnectionPage : Page
             ? Visibility.Visible
             : Visibility.Collapsed;
         ToolTipService.SetToolTip(GatewayHostOpenTerminalButton, _activeHostAccessPlan.TerminalTooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+            GatewayHostOpenTerminalButton,
+            _activeHostAccessPlan.TerminalLabel);
     }
 
     private void SetGatewayHostActionStatus(string message, bool isError = false)
@@ -658,8 +661,9 @@ public sealed partial class ConnectionPage : Page
             }
             return LocalizationHelper.GetString("ConnectionPage_TopologyRemote");
         }
-        catch
+        catch (Exception ex)
         {
+            Services.Logger.Debug($"[ConnectionPage] ClassifyTopology failed for url '{rec.Url}': {ex.Message}");
             return null;
         }
     }
@@ -1868,11 +1872,15 @@ public sealed partial class ConnectionPage : Page
                 AuthErrorBar.Severity = Microsoft.UI.Xaml.Controls.InfoBarSeverity.Error;
                 AuthErrorBar.IsOpen = true;
             }
-            catch { /* last-ditch */ }
+            catch (Exception uiEx)
+            {
+                Logger.Warn($"ConnectionPage: Failed to surface connect failure in auth error bar: {uiEx.Message}");
+            }
         }
         finally
         {
-            try { btn.IsEnabled = true; } catch { /* control may be detached */ }
+            try { btn.IsEnabled = true; }
+            catch (Exception uiEx) { Logger.Debug($"ConnectionPage: Failed to re-enable connect button; control may be detached: {uiEx.Message}"); }
         }
     }
 
@@ -1951,7 +1959,8 @@ public sealed partial class ConnectionPage : Page
             var wasActive = string.Equals(_gatewayRegistry?.ActiveGatewayId, gwId, StringComparison.Ordinal);
             if (wasActive && _connectionManager != null)
             {
-                try { await _connectionManager.DisconnectAsync(); } catch { }
+                try { await _connectionManager.DisconnectAsync(); }
+                catch (Exception ex) { Logger.Warn($"ConnectionPage: Failed to disconnect active gateway before removal: {ex.Message}"); }
             }
             _gatewayRegistry?.Remove(gwId);
             _gatewayRegistry?.Save();
@@ -2026,17 +2035,27 @@ public sealed partial class ConnectionPage : Page
 
             using var httpClient = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             System.Net.Http.HttpResponseMessage? response = null;
+            Exception? firstProbeError = null;
             try { response = await httpClient.GetAsync(httpUrl, ct); }
             catch (OperationCanceledException) { throw; }
-            catch { }
+            catch (Exception ex)
+            {
+                firstProbeError = ex;
+                Logger.Warn($"ConnectionPage: Gateway connectivity probe failed for {GatewayUrlHelper.SanitizeForDisplay(httpUrl)}: {ex.Message}");
+            }
 
             if (ct.IsCancellationRequested) return;
 
             if (response == null || !response.IsSuccessStatusCode)
             {
-                try { response = await httpClient.GetAsync($"{httpUrl}/health", ct); }
+                var healthUrl = $"{httpUrl}/health";
+                try { response = await httpClient.GetAsync(healthUrl, ct); }
                 catch (OperationCanceledException) { throw; }
-                catch { }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"ConnectionPage: Gateway /health connectivity probe failed for {GatewayUrlHelper.SanitizeForDisplay(httpUrl)}: {ex.Message}");
+                    firstProbeError ??= ex;
+                }
             }
 
             if (ct.IsCancellationRequested) return;
@@ -2057,12 +2076,14 @@ public sealed partial class ConnectionPage : Page
                 AddTestResultText.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
             }
         }
+        // slopwatch-ignore: SW003 Shutdown cancellation or disposal is expected and the caller already preserves the safe state.
         catch (OperationCanceledException) { /* debounce or page nav */ }
         catch (Exception ex)
         {
             if (!ct.IsCancellationRequested)
             {
-                AddTestResultText.Text = $"✗ {ex.Message}";
+                Logger.Warn($"ConnectionPage: Gateway connectivity test failed for {GatewayUrlHelper.SanitizeForDisplay(rawUrl)}: {ex.Message}");
+                AddTestResultText.Text = "✗ Unable to test gateway connection. Check the URL and try again.";
                 AddTestResultText.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
             }
         }
@@ -2224,7 +2245,10 @@ public sealed partial class ConnectionPage : Page
                     identityBackupMtimeUtc = info.LastWriteTimeUtc;
                 }
             }
-            catch { /* backup is best-effort; rollback simply skips restore */ }
+            catch (Exception ex)
+            {
+                Logger.Warn($"ConnectionPage: Failed to snapshot gateway identity before direct connect; rollback will skip restore: {ex.Message}");
+            }
 
             if (!string.IsNullOrWhiteSpace(token))
             {
@@ -2388,7 +2412,10 @@ public sealed partial class ConnectionPage : Page
                     File.WriteAllText(identityKeyPath, identityBackup);
                 // else: another writer touched the file; preserve it.
             }
-            catch { /* best-effort restore; failure cannot regress further */ }
+            catch (Exception ex)
+            {
+                Logger.Warn($"ConnectionPage: Failed to restore gateway identity after direct connect rollback: {ex.Message}");
+            }
         }
 
         if (settings != null)
@@ -2888,11 +2915,12 @@ public sealed partial class ConnectionPage : Page
             successPath = ok;
             // !ok falls into finally below — re-enable so user can retry.
         }
-        catch
+        catch (Exception ex)
         {
-            // Swallow; finally re-enables. The pairing list refresh has
-            // its own observable surface (gateway list-updated event), so
-            // there's no clean place to surface a per-row error here.
+            // Finally re-enables. The pairing list refresh has its own
+            // observable surface (gateway list-updated event), so there's
+            // no clean place to surface a per-row error here — but log it.
+            Services.Logger.Warn($"[ConnectionPage] Pairing row action failed: {ex.Message}");
         }
         finally
         {
@@ -3179,7 +3207,10 @@ public sealed partial class ConnectionPage : Page
             if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
                 return uri.Port > 0 ? $"{uri.Scheme}://{uri.Host}:{uri.Port}" : $"{uri.Scheme}://{uri.Host}";
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.Debug($"ConnectionPage: Failed to sanitize gateway URL '{url}': {ex.Message}");
+        }
         return url;
     }
 }
