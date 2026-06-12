@@ -396,6 +396,15 @@ public sealed class ExecApprovalsStore
         await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
+            // Migrate before any write: creating the target file here would permanently
+            // block TryMigrateLegacyFile and silently orphan the legacy configuration.
+            if (TryMigrateLegacyFile() == LegacyMigrationStatus.Blocked)
+            {
+                _logger.Warn("[EXEC-APPROVALS] Refusing to write exec-approvals.json: "
+                    + "unmigrated legacy file is unreadable");
+                return false;
+            }
+
             var result = LoadFile();
             if (result.Status == LoadFileStatus.Invalid)
             {

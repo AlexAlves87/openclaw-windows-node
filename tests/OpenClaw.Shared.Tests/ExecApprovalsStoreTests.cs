@@ -1153,6 +1153,41 @@ public class ExecApprovalsStoreTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task AddAllowlistEntryAsync_CustomStateDir_MigratesLegacyBeforeWriting()
+    {
+        WriteFile(MinimalFileWithAgent("main", "allowlist"));
+        var stateDir = Path.Combine(_dir, "custom-state");
+        var store = Store(stateDir);
+
+        var result = await store.AddAllowlistEntryAsync("main", "**/git.exe");
+
+        Assert.True(result);
+        // Legacy file migrated first; the write lands on the migrated content, not a fresh file.
+        Assert.False(File.Exists(FilePath));
+        Assert.True(File.Exists($"{FilePath}.migrated"));
+        var resolved = store.ResolveReadOnly("main");
+        Assert.Equal(ExecSecurity.Allowlist, resolved.Defaults.Security);
+        Assert.Single(resolved.Allowlist);
+        Assert.Equal("**/git.exe", resolved.Allowlist[0].Pattern);
+    }
+
+    [Fact]
+    public async Task AddAllowlistEntryAsync_CustomStateDir_UnreadableLegacy_RefusesToWrite()
+    {
+        WriteFile("{ bad json }");
+        var stateDir = Path.Combine(_dir, "custom-state");
+        var store = Store(stateDir);
+
+        var result = await store.AddAllowlistEntryAsync("main", "**/git.exe");
+
+        Assert.False(result);
+        // No target file may be created: that would permanently block legacy migration.
+        Assert.False(File.Exists(Path.Combine(stateDir, "exec-approvals.json")));
+        Assert.True(File.Exists(FilePath));
+        Assert.Contains(_log.Warnings, w => w.Contains("Refusing to write"));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static string MinimalFile() => """{"version":1,"agents":{}}""";
